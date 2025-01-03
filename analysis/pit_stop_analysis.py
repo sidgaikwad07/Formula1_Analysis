@@ -1,7 +1,7 @@
 # Fastest Pit Stops Analysis
 # Author: Siddhant Gaikwad
 # Date: 25 December 2024
-# Description: This script analyzes and visualizes the fastest pit stops for Formula 1 teams.
+# Description: This script analyzes and visualizes the fastest pit stops for Formula 1 teams. 
 
 import pandas as pd
 import plotly.express as px
