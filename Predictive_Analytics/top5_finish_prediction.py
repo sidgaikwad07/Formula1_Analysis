@@ -1,12 +1,12 @@
 # Predictive Modeling: Top 5 Finish Prediction
 # Author: Siddhant Gaikwad
-# Date: 28 December 2024
-# Description: This script predicts whether a driver will finish in the top 5 based on qualifying results, driver/team form, and track characteristics.
+# Date: 07 January 2025
+# Description: This script predicts whether a driver will finish in the top 5 based on qualifying results, driver/team form, track characteristics, and pit stop data.
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
+from sklearn.metrics import accuracy_score, classification_report, roc_auc_score, RocCurveDisplay
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -16,14 +16,15 @@ def load_data():
 
     Returns:
         pd.DataFrame: Merged datasets containing qualifying results, driver details,
-                      circuit characteristics, and race years.
+                      circuit characteristics, race years, and pit stop details.
     """
     drivers = pd.read_csv('/Users/sid/Downloads/Formula1_Analysis/F1_dataset/drivers.csv')
     results = pd.read_csv('/Users/sid/Downloads/Formula1_Analysis/F1_dataset/results.csv')
     qualifying = pd.read_csv('/Users/sid/Downloads/Formula1_Analysis/F1_dataset/qualifying.csv')
     circuits = pd.read_csv('/Users/sid/Downloads/Formula1_Analysis/F1_dataset/circuits.csv')
     races = pd.read_csv('/Users/sid/Downloads/Formula1_Analysis/F1_dataset/races_cleaned_1.csv')
-    
+    pit_stops = pd.read_csv('/Users/sid/Downloads/Formula1_Analysis/F1_dataset/pit_stops.csv')
+
     # Merge datasets for modeling
     results = results.merge(races[['raceId', 'year', 'circuitId']], on='raceId', how='left')
     data = results.merge(
@@ -37,6 +38,11 @@ def load_data():
     ).merge(
         circuits[['circuitId', 'name', 'lat', 'lng', 'alt']],
         on='circuitId',
+        how='left'
+    ).merge(
+        pit_stops[['raceId', 'driverId', 'milliseconds']].groupby(['raceId', 'driverId']).mean().reset_index().rename(
+            columns={'milliseconds': 'avg_pit_stop_time'}),
+        on=['raceId', 'driverId'],
         how='left'
     )
 
@@ -54,16 +60,16 @@ def preprocess_data(data):
     Returns:
         tuple: Processed features and target variables for modeling.
     """
-    # Drop rows with missing 'positionorder' or 'qualifying_position'
-    data = data.dropna(subset=['positionorder', 'qualifying_position'])
-    
+    # Drop rows with missing 'positionorder', 'qualifying_position', or 'avg_pit_stop_time'
+    data = data.dropna(subset=['positionorder', 'qualifying_position', 'avg_pit_stop_time'])
+
     # Create a binary target variable: Top 5 finish
     data['is_top_5'] = (data['positionorder'] <= 5).astype(int)
-    
+
     # Create features
-    features = data[['qualifying_position', 'lat', 'lng', 'alt', 'year']]
-    features[['lat', 'lng', 'alt']] = features[['lat', 'lng', 'alt']].apply(lambda x: (x - x.mean()) / x.std())
-    
+    features = data[['qualifying_position', 'lat', 'lng', 'alt', 'year', 'avg_pit_stop_time']]
+    features[['lat', 'lng', 'alt', 'avg_pit_stop_time']] = features[['lat', 'lng', 'alt', 'avg_pit_stop_time']].apply(lambda x: (x - x.mean()) / x.std())
+
     return features, data['is_top_5']
 
 def train_model(features, target):
@@ -90,6 +96,13 @@ def train_model(features, target):
     print("Classification Report:")
     print(classification_report(y_test, predictions))
 
+    # Plot and save the ROC-AUC curve
+    roc_display = RocCurveDisplay.from_estimator(model, X_test, y_test)
+    plt.title("ROC-AUC Curve")
+    plt.tight_layout()
+    plt.savefig("/Users/sid/Downloads/Formula1_Analysis/F1_dataset/roc_auc_curve.png")
+    plt.show()
+
     return model, X_test, y_test, predictions
 
 def feature_importance_plot(model, features):
@@ -109,8 +122,10 @@ def feature_importance_plot(model, features):
     plt.title("Feature Importance")
     plt.xlabel("Importance")
     plt.ylabel("Feature")
+    plt.tight_layout()
+    plt.savefig("/Users/sid/Downloads/Formula1_Analysis/F1_dataset/feature_importance.png")
     plt.show()
-    
+
 def main():
     """
     Main function to execute the predictive modeling workflow.
